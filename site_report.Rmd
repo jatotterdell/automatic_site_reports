@@ -70,7 +70,7 @@ dat <- data %>%
          -expected_date_sms_sent_comment, -actual_date_sms_sent_clean, -actual_date_sms_sent_comment,
          date_of_vaccine_administration_clean, date_of_vaccine_administration_comment, -product_name_of_vaccine_administered,
          -smartvax_data_import_complete) %>%
-  filter(!(!is.na(date_vaccine_due) & date_vaccine_due <= as.Date("2021-01-10")))
+  filter(!(!is.na(date_vaccine_due) & date_vaccine_due <= as.Date("2021-01-10"))) # Exclude the incorrectly synchronised record which was prior to start-up
 ordr_dat <- get_ordered_dat(dat)
 site_dat <- ordr_dat %>% filter(clinic_id %in% site)
 ```
@@ -141,6 +141,6 @@ ggplot(d_rand, aes(redcap_dattim, cn)) +
 ```{r sms}
 tab <- bind_cols(site_summary, sms_summary)
 colnames(tab) <- linebreak(colnames(tab), align = "c")
-kable(tab, caption = "Site summary", booktabs = TRUE, escape = FALSE) %>%
+kable(tab, caption = paste0("Summary of planned and sent SMS at ", paste0(site, collapse = ", ")), booktabs = TRUE, escape = FALSE) %>%
   kable_styling()
 ```

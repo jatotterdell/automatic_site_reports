@@ -19,7 +19,7 @@ current_data <- redcapAPI::exportRecords(rcon) %>%
   )
 current_sites     <- sort(unique(current_data$clinic_id))
 
-current_dir <- paste0("site_reports/", gsub("-", "", Sys.Date()))
+current_dir <- paste0("automatic_site_reports/", gsub("-", "", Sys.Date()))
 if(!dir.exists(current_dir)) {
   dir.create(current_dir)
 }
@@ -28,7 +28,7 @@ if(!dir.exists(current_dir)) {
 for(site in current_sites) {
   cat("Running report for", site, "\n")
   rmarkdown::render(
-    "site_reports/site_report.Rmd",
+    "automatic_site_reports/site_report.Rmd",
     output_file = paste0(site, ".pdf"),
     output_dir = current_dir,
     params = list(data = current_data, site = site),
@@ -38,7 +38,7 @@ for(site in current_sites) {
 # Overall report
 cat("Running report for all sites\n")
 rmarkdown::render(
-  "site_reports/site_report.Rmd",
+  "automatic_site_reports/site_report.Rmd",
   output_file = "_ALL.pdf",
   output_dir = current_dir,
   params = list(data = current_data, site = current_sites),
