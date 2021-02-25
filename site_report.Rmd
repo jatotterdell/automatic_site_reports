@@ -1,0 +1,147 @@
+---
+header-includes:
+- \usepackage{booktabs}
+- \usepackage{makecell}
+output:
+    pdf_document:
+        latex_engine: xelatex
+mainfont: LiberationSans
+sansfont: LiberationSans
+monofont: LiberationMono
+params:
+  today: !r Sys.Date()
+  data: NULL
+  site: "KSL"
+title: "AuTOMATIC Progress Report"
+subtitle: "`r paste0('Clinic: ', paste0(params$site, collapse = ','))`"
+date: "`r params$today`"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE,
+	fig.height = 3,
+	fig.width = 5
+)
+```
+
+
+```{r pkgs}
+library(tidyverse, warn.conflicts = FALSE)
+library(lubridate, warn.conflicts = FALSE)
+library(here, warn.conflicts = FALSE)
+library(kableExtra, warn.conflicts = FALSE)
+
+theme_set(theme_bw(base_size = 10))
+```
+
+
+```{r functions}
+get_ordered_dat <- function(dat) {
+  # Order the records to align the administration dates
+  # Order is:
+  #   - records with !NA date_of_vaccination_administration
+  #   - date_of_vaccination_administration
+  #   - date of record creation (redcap_dattim)
+  #   - date of last modification (redcap_lastmod)
+  dat_ordered <- dat %>%
+    group_by(parent_id) %>%
+    mutate(any_optout = ifelse(any(opted_out == 1, na.rm = T), 1, 0)) %>%
+    group_by(parent_id, child_id) %>%
+    mutate(n = max(row_number())) %>%
+    arrange(parent_id, child_id, !is.na(date_of_vaccination_administration), date_of_vaccination_administration, redcap_dattim, redcap_lastmod) %>%
+    mutate(vaxseq = cumsum(!is.na(current_eligible_vaccination))) %>%
+    ungroup()
+  return(dat_ordered)
+}
+```
+
+
+```{r data}
+# data <- here("data/AUTOMATIC_DATA_2021-02-24_1216.csv")
+today <- params$today
+data <- params$data
+site <- params$site
+dat <- data %>%
+  select(-redcap_repeat_instrument, -redcap_repeat_instance, -child_date_of_birth,
+         -date_vaccine_due_clean, -date_vaccine_due_comment, -expected_date_sms_sent_clean,
+         -expected_date_sms_sent_comment, -actual_date_sms_sent_clean, -actual_date_sms_sent_comment,
+         date_of_vaccine_administration_clean, date_of_vaccine_administration_comment, -product_name_of_vaccine_administered,
+         -smartvax_data_import_complete) %>%
+  filter(!(!is.na(date_vaccine_due) & date_vaccine_due <= as.Date("2021-01-10")))
+ordr_dat <- get_ordered_dat(dat)
+site_dat <- ordr_dat %>% filter(clinic_id %in% site)
+```
+
+
+```{r rand-dat}
+# Number of parents randomised
+n_rand <- length(unique(site_dat$parent_id))
+
+# Date of randomisations (approximately)
+d_rand <- site_dat %>%
+  group_by(parent_id) %>%
+  arrange(redcap_dattim) %>%
+  filter(row_number() == 1) %>%
+  select(parent_id, redcap_dattim) %>%
+  ungroup() %>% 
+  count(redcap_dattim = as_date(redcap_dattim)) %>%
+  complete(redcap_dattim = seq(min(redcap_dattim), max(redcap_dattim), by = "1 day"), fill = list(n = 0)) %>%
+  mutate(cn = cumsum(n))
+
+# Number of total vaccination occasions (parent, child, age)
+n_occasions <- site_dat %>% 
+  count(parent_id, child_id, current_eligible_vaccination) %>% 
+  filter(!is.na(current_eligible_vaccination)) %>%
+  nrow()
+
+site_summary <- tibble(Randomised = n_rand, `Due Vaccinations` = n_occasions)
+```
+
+
+```{r sms-dat}
+# If a child gets vaccinated before the expected sms date,
+# then no SMS will get set.
+# If an SMS was sent, it was on or before the day of vaccination
+# So only ever need to check the first record for each parent, child, age combination
+sms_dat <- site_dat %>%
+  group_by(parent_id, child_id) %>%
+  mutate(vax_lead = lead(date_of_vaccination_administration, 1),
+         vax_date = if_else(is.na(vax_lead), NA_Date_, 
+                            if_else(vax_lead != date_of_vaccination_administration | is.na(date_of_vaccination_administration), 
+                                    vax_lead, NA_Date_))) %>%
+  group_by(parent_id, child_id, current_eligible_vaccination) %>%
+  filter(!is.na(current_eligible_vaccination)) %>%
+  filter(row_number() == 1) %>%
+  select(parent_id, child_id, current_eligible_vaccination, randomisation_outcome, clinic_id,
+         expected_date_sms_sent, actual_date_sms_sent, sms_delivery_failure_indicator, vax_date) %>%
+  ungroup()
+sms_summary <- sms_dat %>%
+  summarise(`SMS\nPlanned` = sum(!is.na(expected_date_sms_sent)),
+            `SMS\nPast Due` = sum(expected_date_sms_sent < today - 1, na.rm = T),
+            `SMS\nSent`    = sum(expected_date_sms_sent < today - 1 & !is.na(actual_date_sms_sent)),
+            `SMS\nSuccess` = sum(sms_delivery_failure_indicator == "success", na.rm = T),
+            `Vaccination\nbefore SMS` = sum(expected_date_sms_sent < today & !is.na(expected_date_sms_sent) & vax_date < expected_date_sms_sent, na.rm = T))
+# check <- sms_dat %>% filter((expected_date_sms_sent < today & !is.na(expected_date_sms_sent) & is.na(actual_date_sms_sent)))
+# sms_dat %>% filter(randomisation_outcome != 1) %>% filter(expected_date_sms_sent < today - 1) %>% View
+```
+
+
+```{r, rand-plot, fig.cap = paste0("Cumulative randomisations at ", paste0(site, collapse = ", "), ".")}
+ggplot(d_rand, aes(redcap_dattim, cn)) +
+  geom_step() +
+  scale_y_continuous("Cumulative number of \nparents randomised", limits = c(0, NA)) +
+  scale_x_date("Calendar date", date_breaks = "1 week", date_labels = "%d %b %Y") +
+  theme(axis.text.x = element_text(angle = 30, vjust = 0.5))
+```
+
+
+```{r sms}
+tab <- bind_cols(site_summary, sms_summary)
+colnames(tab) <- linebreak(colnames(tab), align = "c")
+kable(tab, caption = "Site summary", booktabs = TRUE, escape = FALSE) %>%
+  kable_styling()
+```
