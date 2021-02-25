@@ -17,8 +17,6 @@ current_data <- redcapAPI::exportRecords(rcon) %>%
     actual_date_sms_sent = as_date(actual_date_sms_sent),
     date_of_vaccination_administration = as_date(date_of_vaccination_administration)
   )
-# current_data_path <- here("data/AUTOMATIC_DATA_2021-02-25_0810.csv")
-# current_data      <- read_csv(current_data_path)
 current_sites     <- sort(unique(current_data$clinic_id))
 
 current_dir <- paste0("site_reports/", gsub("-", "", Sys.Date()))
