@@ -61,7 +61,6 @@ get_ordered_dat <- function(dat) {
 
 
 ```{r data}
-# data <- here("data/AUTOMATIC_DATA_2021-02-24_1216.csv")
 today <- params$today
 data <- params$data
 site <- params$site
