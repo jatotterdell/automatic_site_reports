@@ -17,12 +17,14 @@ current_data <- redcapAPI::exportRecords(rcon) %>%
     actual_date_sms_sent = as_date(actual_date_sms_sent),
     date_of_vaccination_administration = as_date(date_of_vaccination_administration)
   )
-current_sites     <- sort(unique(current_data$clinic_id))
+current_sites <- sort(unique(current_data$clinic_id))
 
 current_dir <- paste0("automatic_site_reports/", gsub("-", "", Sys.Date()))
 if(!dir.exists(current_dir)) {
   dir.create(current_dir)
 }
+
+readr::write_csv(current_data, paste0(current_dir, "/todays_data.csv"))
 
 # Site specific report
 for(site in current_sites) {
